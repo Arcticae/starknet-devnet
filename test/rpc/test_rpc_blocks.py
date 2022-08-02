@@ -1,15 +1,18 @@
 """
 Tests RPC blocks
 """
+from starkware.starknet.services.api.feeder_gateway.response_objects import DeploySpecificInfo
 
+from starknet_devnet.blueprints.rpc import BlockNumberDict, BlockHashDict, BlockTag, BlockNumber, BlockHash, BlockId, \
+    rpc_transaction, rpc_deploy_transaction
 from starknet_devnet.general_config import DEFAULT_GENERAL_CONFIG
 
 from .rpc_utils import rpc_call, get_block_with_transaction, pad_zero, gateway_call
 
 
-def test_get_block_by_number(deploy_info):
+def test_get_block_with_tx_hashes_by_block_number(deploy_info):
     """
-    Get block by number
+    Get block with tx hashes by block number
     """
     gateway_block: dict = get_block_with_transaction(
         deploy_info["transaction_hash"])
@@ -17,8 +20,10 @@ def test_get_block_by_number(deploy_info):
     block_number: int = gateway_block["block_number"]
     new_root: str = gateway_block["state_root"]
 
+    block_number_dict = BlockNumberDict(block_number=block_number)
+
     resp = rpc_call(
-        "starknet_getBlockByNumber", params={"block_number": block_number}
+        "starknet_getBlockWithTxHashes", params={"block_id": block_number_dict}
     )
     block = resp["result"]
     transaction_hash: str = pad_zero(deploy_info["transaction_hash"])
@@ -31,6 +36,61 @@ def test_get_block_by_number(deploy_info):
         DEFAULT_GENERAL_CONFIG.sequencer_address)
     assert block["new_root"] == pad_zero(new_root)
     assert block["transactions"] == [transaction_hash]
+
+
+def test_get_block_with_tx_hashes_by_block_hash(deploy_info):
+    """
+    Get block with tx hashes by block hash
+    """
+    gateway_block: dict = get_block_with_transaction(
+        deploy_info["transaction_hash"])
+    block_hash: str = gateway_block["block_hash"]
+    block_number: int = gateway_block["block_number"]
+    new_root: str = gateway_block["state_root"]
+
+    block_hash_dict = BlockHashDict(block_hash=block_hash)
+
+    resp = rpc_call(
+        "starknet_getBlockWithTxHashes", params={"block_id": block_hash_dict}
+    )
+    block = resp["result"]
+    transaction_hash: str = pad_zero(deploy_info["transaction_hash"])
+
+    assert block["block_hash"] == pad_zero(block_hash)
+    assert block["parent_hash"] == pad_zero(gateway_block["parent_block_hash"])
+    assert block["block_number"] == block_number
+    assert block["status"] == "ACCEPTED_ON_L2"
+    assert block["sequencer_address"] == hex(
+        DEFAULT_GENERAL_CONFIG.sequencer_address)
+    assert block["new_root"] == pad_zero(new_root)
+    assert block["transactions"] == [transaction_hash]
+
+
+def test_get_block_with_txs_by_block_number(deploy_info):
+    """
+    Get block with txs by block number
+    """
+    gateway_block: dict = get_block_with_transaction(
+        deploy_info["transaction_hash"])
+    block_hash: str = gateway_block["block_hash"]
+    block_number: int = gateway_block["block_number"]
+    new_root: str = gateway_block["state_root"]
+
+    block_number_dict = BlockNumberDict(block_number=block_number)
+
+    resp = rpc_call(
+        "starknet_getBlockWithTxs", params={"block_id": block_number_dict}
+    )
+    block = resp["result"]
+
+    assert block["block_hash"] == pad_zero(block_hash)
+    assert block["parent_hash"] == pad_zero(gateway_block["parent_block_hash"])
+    assert block["block_number"] == block_number
+    assert block["status"] == "ACCEPTED_ON_L2"
+    assert block["sequencer_address"] == hex(
+        DEFAULT_GENERAL_CONFIG.sequencer_address)
+    assert block["new_root"] == pad_zero(new_root)
+    # assert block["transactions"] == [rpc_transaction(tx) for tx in gateway_block["transactions"]] #TODO
 
 
 # pylint: disable=unused-argument

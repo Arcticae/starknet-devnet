@@ -1,6 +1,6 @@
 """
 RPC routes
-rpc version: 0.15.0
+API Specification v0.1.0
 """
 # pylint: disable=too-many-lines
 
@@ -9,7 +9,7 @@ import dataclasses
 import json
 
 from typing import Callable, Union, List, Tuple, Optional, Any
-from typing_extensions import TypedDict
+from typing_extensions import TypedDict, Literal
 from flask import Blueprint, request
 from marshmallow.exceptions import MarshmallowError
 
@@ -40,7 +40,137 @@ from ..util import StarknetDevnetException
 
 rpc = Blueprint("rpc", __name__, url_prefix="/rpc")
 
-PROTOCOL_VERSION = "0.15.0"
+# PROTOCOL_VERSION = "0.31.0" #TODO
+
+Felt = str
+
+BlockHash = Felt
+BlockNumber = int
+BlockTag = Literal["latest", "pending"]
+
+class BlockHashDict(TypedDict):
+    block_hash: Felt
+
+class BlockNumberDict(TypedDict):
+    block_number: int
+
+BlockId = Union[BlockHashDict, BlockNumberDict, BlockTag]
+
+TxnStatus = BlockStatus = Literal["PENDING", "ACCEPTED_ON_L2", "ACCEPTED_ON_L1", "REJECTED"]
+
+TxnHash = Felt
+Address = Felt
+NumAsHex = str
+TxnType = Literal["DECLARE", "DEPLOY", "INVOKE"]
+
+
+class RpcBlock(TypedDict):
+    """
+    TypeDict for rpc block
+    """
+    status: BlockStatus
+    block_hash: BlockHash
+    parent_hash: BlockHash
+    block_number: BlockNumber
+    new_root: Felt
+    timestamp: int
+    sequencer_address: Felt
+    transactions: Union[List[str], List[dict]]
+
+
+class RpcInvokeTransaction(TypedDict):
+    """
+    TypedDict for rpc invoke transaction
+    """
+    contract_address: Address
+    entry_point_selector: Optional[Felt] #TODO why optional
+    calldata: Optional[List[Felt]] #TODO why optional
+    # Common
+    transaction_hash: TxnHash
+    max_fee: Felt
+    version: NumAsHex
+    signature: List[Felt]
+    nonce: Felt
+    type: TxnType
+
+
+class RpcDeclareTransaction(TypedDict):
+    """
+    TypedDict for rpc declare transaction
+    """
+    class_hash: Felt
+    sender_address: Address
+    # Common
+    transaction_hash: TxnHash
+    max_fee: Felt
+    version: NumAsHex
+    signature: List[Felt]
+    nonce: Felt
+    type: TxnType
+
+
+class RpcDeployTransaction(TypedDict):
+    """
+    TypedDict for rpc deploy transaction
+    """
+    transaction_hash: TxnHash
+    class_hash: Felt
+    version: NumAsHex
+    type: TxnType
+    contract_address: Felt
+    contract_address_salt: Felt
+    constructor_calldata: List[Felt]
+
+
+def rpc_invoke_transaction(transaction: InvokeSpecificInfo) -> RpcInvokeTransaction:
+    """
+    Convert gateway invoke transaction to rpc format
+    """
+    transaction: RpcInvokeTransaction = {
+        "contract_address": rpc_felt(transaction.contract_address),
+        "entry_point_selector": rpc_felt(transaction.entry_point_selector),
+        "calldata": [rpc_felt(data) for data in transaction.calldata],
+        "transaction_hash": rpc_felt(transaction.transaction_hash),
+        "max_fee": rpc_felt(transaction.max_fee),
+        "version": hex(0x0),
+        "signature": [rpc_felt(value) for value in transaction.signature],
+        "nonce": rpc_felt(0), #TODO ?
+        "type": json.dumps(transaction.tx_type, default=lambda x: x.name),
+    }
+    return transaction
+
+
+def rpc_declare_transaction(transaction: DeclareSpecificInfo) -> RpcDeclareTransaction:
+    """
+    Convert gateway declare transaction to rpc format
+    """
+    transaction: RpcDeclareTransaction = {
+        "class_hash": rpc_felt(transaction.class_hash),
+        "sender_address": rpc_felt(transaction.sender_address),
+        "transaction_hash": rpc_felt(transaction.transaction_hash),
+        "max_fee": rpc_felt(transaction.max_fee),
+        "version": hex(transaction.version),
+        "signature": [rpc_felt(value) for value in transaction.signature],
+        "nonce": rpc_felt(transaction.nonce),
+        "type": json.dumps(transaction.tx_type, default=lambda x: x.name),
+    }
+    return transaction
+
+
+def rpc_deploy_transaction(transaction: DeploySpecificInfo) -> RpcDeployTransaction:
+    """
+    Convert gateway deploy transaction to rpc format
+    """
+    transaction: RpcDeployTransaction = {
+        "transaction_hash": rpc_felt(transaction.transaction_hash),
+        "class_hash": rpc_felt(transaction.contract_address),
+        "version": hex(0x0),
+        "type": json.dumps(transaction.tx_type, default=lambda x: x.name),
+        "contract_address": rpc_felt(transaction.contract_address),
+        "contract_address_salt": rpc_felt(transaction.contract_address_salt),
+        "constructor_calldata": [rpc_felt(data) for data in transaction.constructor_calldata],
+    }
+    return transaction
 
 
 @rpc.route("", methods=["POST"])
@@ -60,43 +190,58 @@ async def base_route():
     return rpc_response(message_id=message_id, content=result)
 
 
-async def get_block_by_hash(block_hash: str, requested_scope: str = "TXN_HASH") -> dict:
+async def get_block_with_tx_hashes(block_id: BlockId) -> dict:
     """
-    Get block information given the block id
-    """
-    try:
-        result = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_hash)
-    except StarknetDevnetException as ex:
-        raise RpcError(code=24, message="Invalid block hash") from ex
-
-    return await rpc_block(block=result, requested_scope=requested_scope)
-
-
-async def get_block_by_number(block_number: int, requested_scope: str = "TXN_HASH") -> dict:
-    """
-    Get block information given the block number (its height)
+    Get block information with transaction hashes given the block id
     """
     try:
-        result = state.starknet_wrapper.blocks.get_by_number(block_number=block_number)
+        if isinstance(block_id, str):
+            result = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id)
+        elif "block_hash" in block_id:
+            result = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id["block_hash"])
+        else:
+            result = state.starknet_wrapper.blocks.get_by_number(block_number=block_id["block_number"])
     except StarknetDevnetException as ex:
-        raise RpcError(code=26, message="Invalid block number") from ex
+        raise RpcError(code=24, message="Invalid block id") from ex
 
-    return await rpc_block(block=result, requested_scope=requested_scope)
+    return await rpc_block(block=result)
 
 
-async def get_state_update_by_hash(block_hash: str) -> dict:
+async def get_block_with_txs(block_id: BlockId) -> dict:
+    """
+    Get block information with full transactions given the block id
+    """
+    try:
+        if isinstance(block_id, str):
+            result = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id)
+        elif "block_hash" in block_id:
+            result = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id["block_hash"])
+        else:
+            result = state.starknet_wrapper.blocks.get_by_number(block_number=block_id["block_number"])
+    except StarknetDevnetException as ex:
+        raise RpcError(code=24, message="Invalid block id") from ex
+
+    return await rpc_block(block=result, requested_scope="FULL_TXNS")
+
+
+async def get_state_update(block_id: BlockId) -> dict:
     """
     Get the information about the result of executing the requested block
     """
     try:
-        result = state.starknet_wrapper.blocks.get_state_update(block_hash=block_hash)
+        if isinstance(block_id, str):
+            result = state.starknet_wrapper.blocks.get_state_update(block_hash=block_id)
+        elif "block_hash" in block_id:
+            result = state.starknet_wrapper.blocks.get_state_update(block_hash=block_id["block_hash"])
+        else:
+            result = state.starknet_wrapper.blocks.get_state_update(block_number=block_id["block_number"])
     except StarknetDevnetException as ex:
-        raise RpcError(code=24, message="Invalid block hash") from ex
+        raise RpcError(code=24, message="Invalid block id") from ex
 
     return rpc_state_update(result)
 
 
-async def get_storage_at(contract_address: str, key: str, block_hash: str) -> str:
+async def get_storage_at(contract_address: Address, key: str, block_id: BlockId) -> Felt:
     """
     Get the value of the storage at the given address and key
     """
@@ -114,7 +259,7 @@ async def get_storage_at(contract_address: str, key: str, block_hash: str) -> st
     )
 
 
-async def get_transaction_by_hash(transaction_hash: str) -> dict:
+async def get_transaction_by_hash(transaction_hash: TxnHash) -> dict:
     """
     Get the details and status of a submitted transaction
     """
@@ -129,39 +274,29 @@ async def get_transaction_by_hash(transaction_hash: str) -> dict:
     return rpc_transaction(result.transaction)
 
 
-async def get_transaction_by_block_hash_and_index(block_hash: str, index: int) -> dict:
+async def get_transaction_by_block_id_and_index(block_id: BlockId, index: int) -> dict:
     """
-    Get the details of a transaction by a given block hash and index
+    Get the details of a transaction by a given block id and index
     """
     try:
-        block = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_hash)
+        if isinstance(block_id, str):
+            block = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id)
+        elif "block_hash" in block_id:
+            block = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id["block_hash"])
+        else:
+            block = state.starknet_wrapper.blocks.get_by_number(block_number=block_id["block_number"])
     except StarknetDevnetException as ex:
-        raise RpcError(code=24, message="Invalid block hash") from ex
+        raise RpcError(code=24, message="Invalid block id") from ex
 
     try:
         transaction_hash: int = block.transactions[index].transaction_hash
-        return await get_transaction_by_hash(transaction_hash=rpc_felt(transaction_hash))
     except IndexError as ex:
         raise RpcError(code=27, message="Invalid transaction index in a block") from ex
 
-
-async def get_transaction_by_block_number_and_index(block_number: int, index: int) -> dict:
-    """
-    Get the details of a transaction by a given block number and index
-    """
-    try:
-        block = state.starknet_wrapper.blocks.get_by_number(block_number=block_number)
-    except StarknetDevnetException as ex:
-        raise RpcError(code=26, message="Invalid block number") from ex
-
-    try:
-        transaction_hash: int = block.transactions[index].transaction_hash
-        return await get_transaction_by_hash(transaction_hash=rpc_felt(transaction_hash))
-    except IndexError as ex:
-        raise RpcError(code=27, message="Invalid transaction index in a block") from ex
+    return await get_transaction_by_hash(transaction_hash=rpc_felt(transaction_hash))
 
 
-async def get_transaction_receipt(transaction_hash: str) -> dict:
+async def get_transaction_receipt(transaction_hash: TxnHash) -> dict:
     """
     Get the transaction receipt by the transaction hash
     """
@@ -176,27 +311,27 @@ async def get_transaction_receipt(transaction_hash: str) -> dict:
     return rpc_transaction_receipt(result)
 
 
-async def get_code(contract_address: str) -> dict:
+# async def get_code(contract_address: str) -> dict:
+#     """
+#     Get the code of a specific contract
+#     """
+#     try:
+#         result = state.starknet_wrapper.contracts.get_code(address=int(contract_address, 16))
+#     except StarknetDevnetException as ex:
+#         raise RpcError(code=20, message="Contract not found") from ex
+#
+#     if len(result["bytecode"]) == 0:
+#         raise RpcError(code=20, message="Contract not found")
+#
+#     return {
+#         "bytecode": result["bytecode"],
+#         "abi": json.dumps(result["abi"])
+#     }
+
+
+async def get_class(class_hash: Felt) -> dict:
     """
-    Get the code of a specific contract
-    """
-    try:
-        result = state.starknet_wrapper.contracts.get_code(address=int(contract_address, 16))
-    except StarknetDevnetException as ex:
-        raise RpcError(code=20, message="Contract not found") from ex
-
-    if len(result["bytecode"]) == 0:
-        raise RpcError(code=20, message="Contract not found")
-
-    return {
-        "bytecode": result["bytecode"],
-        "abi": json.dumps(result["abi"])
-    }
-
-
-async def get_class(class_hash: str) -> dict:
-    """
-    Get the code of a specific contract
+    Get the contract class definition associated with the given hash
     """
     try:
         result = state.starknet_wrapper.contracts.get_class_by_hash(class_hash=int(class_hash, 16))
@@ -206,9 +341,9 @@ async def get_class(class_hash: str) -> dict:
     return rpc_contract_class(result)
 
 
-async def get_class_hash_at(contract_address: str) -> str:
+async def get_class_hash_at(block_id: BlockId, contract_address: Address) -> Felt:
     """
-    Get the contract class hash for the contract deployed at the given address
+    Get the contract class hash in the given block for the contract deployed at the given address
     """
     try:
         result = state.starknet_wrapper.contracts.get_class_hash_at(address=int(contract_address, 16))
@@ -218,9 +353,9 @@ async def get_class_hash_at(contract_address: str) -> str:
     return rpc_felt(result)
 
 
-async def get_class_at(contract_address: str) -> dict:
+async def get_class_at(block_id: BlockId, contract_address: Address) -> dict:
     """
-    Get the contract class definition at the given address
+    Get the contract class definition in the given block at the given address
     """
     try:
         class_hash = state.starknet_wrapper.contracts.get_class_hash_at(address=int(contract_address, 16))
@@ -231,29 +366,24 @@ async def get_class_at(contract_address: str) -> dict:
     return rpc_contract_class(result)
 
 
-async def get_block_transaction_count_by_hash(block_hash: str) -> int:
+async def get_block_transaction_count(block_id: BlockId) -> int:
     """
-    Get the number of transactions in a block given a block hash
-    """
-    try:
-        block = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_hash)
-        return len(block.transactions)
-    except StarknetDevnetException as ex:
-        raise RpcError(code=24, message="Invalid block hash") from ex
-
-
-async def get_block_transaction_count_by_number(block_number: int) -> int:
-    """
-    Get the number of transactions in a block given a block number (height)
+    Get the number of transactions in a block given a block id
     """
     try:
-        block = state.starknet_wrapper.blocks.get_by_number(block_number=block_number)
-        return len(block.transactions)
+        if isinstance(block_id, str):
+            block = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id)
+        elif "block_hash" in block_id:
+            block = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id["block_hash"])
+        else:
+            block = state.starknet_wrapper.blocks.get_by_number(block_number=block_id["block_number"])
     except StarknetDevnetException as ex:
-        raise RpcError(code=26, message="Invalid block number") from ex
+        raise RpcError(code=24, message="Invalid block id") from ex
+
+    return len(block.transactions)
 
 
-async def call(contract_address: str, entry_point_selector: str, calldata: list, block_hash: str = "") -> list:
+async def call(contract_address: str, entry_point_selector: str, calldata: list, block_id: BlockId) -> List[Felt]:
     """
     Call a starknet function without creating a StarkNet transaction
     """
@@ -285,19 +415,38 @@ async def call(contract_address: str, entry_point_selector: str, calldata: list,
         raise RpcError(code=-1, message=ex.message) from ex
 
 
-async def estimate_fee():
+async def estimate_fee(request: RpcInvokeTransaction, block_id: BlockId) -> dict:
     """
-    Get the estimate fee for the transaction
+    Estimate the fee for a given StarkNet transaction
     """
     raise NotImplementedError()
 
 
-async def get_block_number() -> int:
+async def block_number() -> int:
     """
     Get the most recent accepted block number
     """
-    result = state.starknet_wrapper.blocks.get_number_of_blocks() - 1
-    return result if result >= 0 else 0
+    number_of_blocks = state.starknet_wrapper.blocks.get_number_of_blocks()
+    if number_of_blocks == 0:
+        raise RpcError(code=32, message="There are no blocks") from ex
+
+
+async def block_hash_and_number() -> dict:
+    """
+    Get the most recent accepted block hash and number
+    """
+    last_block_number = state.starknet_wrapper.blocks.get_number_of_blocks() - 1
+
+    try:
+        last_block = state.starknet_wrapper.blocks.get_by_number(last_block_number)
+    except StarknetDevnetException as ex:
+        raise RpcError(code=32, message="There are no blocks") from ex
+
+    result = {
+        "block_hash": rpc_felt(last_block.block_hash),
+        "block_number": last_block.block_number,
+    }
+    return result
 
 
 async def chain_id() -> str:
@@ -310,7 +459,7 @@ async def chain_id() -> str:
     return hex(chain)
 
 
-async def pending_transactions():
+async def pending_transactions() -> List[Union[RpcInvokeTransaction, RpcDeclareTransaction, RpcDeployTransaction]]:
     """
     Returns the transactions in the transaction pool, recognized by this sequencer
     """
@@ -325,16 +474,23 @@ async def protocol_version() -> str:
     return "0x" + protocol_hex
 
 
-async def syncing():
+async def syncing() -> dict:
     """
     Returns an object about the sync status, or false if the node is not synching
     """
     raise NotImplementedError()
 
 
-async def get_events():
+async def get_events() -> dict:
     """
     Returns all events matching the given filter
+    """
+    raise NotImplementedError()
+
+
+async def get_nonce(contract_address: Address) -> Felt:
+    """
+    Get the latest nonce associated with the given address
     """
     raise NotImplementedError()
 
@@ -430,8 +586,8 @@ class EntryPoint(TypedDict):
     """
     TypedDict for rpc contract class entry point
     """
-    offset: str
-    selector: str
+    offset: NumAsHex
+    selector: Felt
 
 
 class EntryPoints(TypedDict):
@@ -481,20 +637,6 @@ def rpc_contract_class(contract_class: ContractClass) -> RpcContractClass:
     return _contract_class
 
 
-class RpcBlock(TypedDict):
-    """
-    TypeDict for rpc block
-    """
-    block_hash: str
-    parent_hash: str
-    block_number: int
-    status: str
-    sequencer_address: str
-    new_root: str
-    timestamp: int
-    transactions: Union[List[str], List[dict]]
-
-
 async def rpc_block(block: StarknetBlock, requested_scope: Optional[str] = "TXN_HASH") -> RpcBlock:
     """
     Convert gateway block to rpc block
@@ -504,7 +646,7 @@ async def rpc_block(block: StarknetBlock, requested_scope: Optional[str] = "TXN_
         return [rpc_transaction(tx) for tx in block.transactions]
 
     async def transaction_hashes() -> List[str]:
-        return [tx["txn_hash"] for tx in await transactions()]
+        return [tx["transaction_hash"] for tx in await transactions()]
 
     async def full_transactions() -> list[dict[str, Any]]:
         transactions_and_receipts = []
@@ -530,13 +672,13 @@ async def rpc_block(block: StarknetBlock, requested_scope: Optional[str] = "TXN_
     config = devnet_state.general_config
 
     block: RpcBlock = {
+        "status": block.status.name,
         "block_hash": rpc_felt(block.block_hash),
         "parent_hash": rpc_felt(block.parent_block_hash) or "0x0",
         "block_number": block.block_number if block.block_number is not None else 0,
-        "status": block.status.name,
-        "sequencer_address": hex(config.sequencer_address),
         "new_root": new_root(),
         "timestamp": block.timestamp,
+        "sequencer_address": hex(config.sequencer_address),
         "transactions": transactions,
     }
     return block
@@ -546,25 +688,32 @@ class RpcStorageDiff(TypedDict):
     """
     TypedDict for rpc storage diff
     """
-    address: str
-    key: str
-    value: str
+    address: Felt
+    key: Felt
+    value: Felt
 
 
-class RpcContractDiff(TypedDict):
+class RpcDeclaredContractDiff(TypedDict):
     """
-    TypedDict for rpc contract diff
+    TypedDict for rpc declared contract diff
     """
-    address: str
-    contract_hash: str
+    class_hash: Felt
+
+
+class RpcDeployedContractDiff(TypedDict):
+    """
+    TypedDict for rpc deployed contract diff
+    """
+    address: Felt
+    class_hash: Felt
 
 
 class RpcNonceDiff(TypedDict):
     """
     TypedDict for rpc nonce diff
     """
-    contract_address: str
-    nonce: str
+    contract_address: Address
+    nonce: Felt
 
 
 class RpcStateDiff(TypedDict):
@@ -572,7 +721,8 @@ class RpcStateDiff(TypedDict):
     TypedDict for rpc state diff
     """
     storage_diffs: List[RpcStorageDiff]
-    contracts: List[RpcContractDiff]
+    declared_contracts: List[RpcDeclaredContractDiff]
+    deployed_contracts: List[RpcDeployedContractDiff]
     nonces: List[RpcNonceDiff]
 
 
@@ -580,10 +730,9 @@ class RpcStateUpdate(TypedDict):
     """
     TypedDict for rpc state update
     """
-    block_hash: str
-    new_root: str
-    old_root: str
-    accepted_time: int
+    block_hash: BlockHash
+    new_root: Felt
+    old_root: Felt
     state_diff: RpcStateDiff
 
 
@@ -603,80 +752,58 @@ def rpc_state_update(state_update: BlockStateUpdate) -> RpcStateUpdate:
                 _storage_diffs.append(_diff)
         return _storage_diffs
 
-    def contracts() -> List[RpcContractDiff]:
+    def declared_contracts() -> List[RpcDeclaredContractDiff]:
         _contracts = []
-        for contract in state_update.state_diff.deployed_contracts:
-            diff: RpcContractDiff = {
-                "address": rpc_felt(contract.address),
-                "contract_hash": rpc_felt(contract.class_hash)
+        for contract in state_update.state_diff.declared_contracts:
+            diff: RpcDeclaredContractDiff = {
+                "class_hash": rpc_felt(contract.class_hash)
             }
             _contracts.append(diff)
         return _contracts
 
-    def timestamp() -> int:
-        block = state.starknet_wrapper.blocks.get_by_hash(block_hash=hex(state_update.block_hash))
-        return block.timestamp
+    def deployed_contracts() -> List[RpcDeployedContractDiff]:
+        _contracts = []
+        for contract in state_update.state_diff.deployed_contracts:
+            diff: RpcDeployedContractDiff = {
+                "address": rpc_felt(contract.address),
+                "class_hash": rpc_felt(contract.class_hash)
+            }
+            _contracts.append(diff)
+        return _contracts
 
     rpc_state: RpcStateUpdate = {
         "block_hash": rpc_felt(state_update.block_hash),
         "new_root": rpc_root(state_update.new_root.hex()),
         "old_root": rpc_root(state_update.old_root.hex()),
-        "accepted_time": timestamp(),
         "state_diff": {
             "storage_diffs": storage_diffs(),
-            "contracts": contracts(),
+            "declared_contracts": declared_contracts(),
+            "deployed_contracts": deployed_contracts(),
             "nonces": [],
         }
     }
     return rpc_state
 
 
-def rpc_state_diff_contract(contract: dict) -> dict:
-    """
-    Convert gateway contract state diff to rpc contract state diff
-    """
-    return {
-        "address": contract["address"],
-        "contract_hash": f"0x{contract['contract_hash']}",
-    }
+# def rpc_state_diff_contract(contract: dict) -> dict:
+#     """
+#     Convert gateway contract state diff to rpc contract state diff
+#     """
+#     return {
+#         "address": contract["address"],
+#         "contract_hash": f"0x{contract['contract_hash']}",
+#     }
 
 
-def rpc_state_diff_storage(contract: dict) -> dict:
-    """
-    Convert gateway storage state diff to rpc storage state diff
-    """
-    return {
-        "address": contract["address"],
-        "key": contract["key"],
-        "value": contract["value"],
-    }
-
-
-class RpcInvokeTransaction(TypedDict):
-    """
-    TypedDict for rpc invoke transaction
-    """
-    contract_address: str
-    entry_point_selector: Optional[str]
-    calldata: Optional[List[str]]
-    # Common
-    txn_hash: str
-    max_fee: str
-    version: str
-    signature: List[str]
-
-
-class RpcDeclareTransaction(TypedDict):
-    """
-    TypedDict for rpc declare transaction
-    """
-    contract_class: RpcContractClass
-    sender_address: str
-    # Common
-    txn_hash: str
-    max_fee: str
-    version: str
-    signature: List[str]
+# def rpc_state_diff_storage(contract: dict) -> dict:
+#     """
+#     Convert gateway storage state diff to rpc storage state diff
+#     """
+#     return {
+#         "address": contract["address"],
+#         "key": contract["key"],
+#         "value": contract["value"],
+#     }
 
 
 class RpcInvokeTransactionResult(TypedDict):
@@ -702,59 +829,7 @@ class RpcDeployTransactionResult(TypedDict):
     contract_address: str
 
 
-def rpc_invoke_transaction(transaction: InvokeSpecificInfo) -> RpcInvokeTransaction:
-    """
-    Convert gateway invoke transaction to rpc format
-    """
-    transaction: RpcInvokeTransaction = {
-        "contract_address": rpc_felt(transaction.contract_address),
-        "entry_point_selector": rpc_felt(transaction.entry_point_selector),
-        "calldata": [rpc_felt(data) for data in transaction.calldata],
-        "max_fee": rpc_felt(transaction.max_fee),
-        "txn_hash": rpc_felt(transaction.transaction_hash),
-        "version": hex(0x0),
-        "signature": [rpc_felt(value) for value in transaction.signature]
-    }
-    return transaction
-
-
-def rpc_deploy_transaction(transaction: DeploySpecificInfo) -> RpcInvokeTransaction:
-    """
-    Convert gateway deploy transaction to rpc format
-    """
-    transaction: RpcInvokeTransaction = {
-        "contract_address": rpc_felt(transaction.contract_address),
-        "entry_point_selector": None,
-        "calldata": [rpc_felt(data) for data in transaction.constructor_calldata],
-        "max_fee": rpc_felt(0x0),
-        "txn_hash": rpc_felt(transaction.transaction_hash),
-        "version": hex(0x0),
-        "signature": []
-    }
-    return transaction
-
-
-def rpc_declare_transaction(transaction: DeclareSpecificInfo) -> RpcDeclareTransaction:
-    """
-    Convert gateway declare transaction to rpc format
-    """
-    def contract_class() -> RpcContractClass:
-        # pylint: disable=no-member
-        _contract_claass = state.starknet_wrapper.contracts.get_class_by_hash(transaction.class_hash)
-        return rpc_contract_class(_contract_claass)
-
-    transaction: RpcDeclareTransaction = {
-        "contract_class": contract_class(),
-        "sender_address": rpc_felt(transaction.sender_address),
-        "max_fee": rpc_felt(transaction.max_fee),
-        "txn_hash": rpc_felt(transaction.transaction_hash),
-        "version": hex(transaction.version),
-        "signature": [rpc_felt(value) for value in transaction.signature]
-    }
-    return transaction
-
-
-def rpc_transaction(transaction: TransactionSpecificInfo) -> Union[RpcInvokeTransaction, RpcDeclareTransaction]:
+def rpc_transaction(transaction: TransactionSpecificInfo) -> Union[RpcInvokeTransaction, RpcDeclareTransaction, RpcDeployTransaction]:
     """
     Convert gateway transaction to rpc transaction
     """
@@ -770,8 +845,8 @@ class MessageToL1(TypedDict):
     """
     TypedDict for rpc message from l2 to l1
     """
-    to_address: str
-    payload: List[str]
+    to_address: Felt
+    payload: List[Felt]
 
 
 class MessageToL2(TypedDict):
@@ -779,16 +854,16 @@ class MessageToL2(TypedDict):
     TypedDict for rpc message from l1 to l2
     """
     from_address: str
-    payload: List[str]
+    payload: List[Felt]
 
 
 class Event(TypedDict):
     """
     TypedDict for rpc event
     """
-    from_address: str
-    keys: List[str]
-    data: List[str]
+    from_address: Address
+    keys: List[Felt]
+    data: List[Felt]
 
 
 class RpcBaseTransactionReceipt(TypedDict):
@@ -796,10 +871,27 @@ class RpcBaseTransactionReceipt(TypedDict):
     TypedDict for rpc transaction receipt
     """
     # Common
-    txn_hash: str
-    actual_fee: str
+    transaction_hash: TxnHash
+    actual_fee: Felt
     status: str
     statusData: Optional[str]
+
+
+class RpcPendingReceipt(TypedDict):
+    """
+    TypedDict for rpc pending transaction receipt
+    """
+    messages_sent: List[MessageToL1]
+    l1_origin_message: Optional[MessageToL2]
+    events: List[Event]
+    # Common
+    transaction_hash: TxnHash
+    actual_fee: Felt
+
+    status: TxnStatus
+    statusData: Optional[str]
+    block_hash: BlockHash
+    block_number: BlockNumber
 
 
 class RpcInvokeReceipt(TypedDict):
@@ -810,10 +902,12 @@ class RpcInvokeReceipt(TypedDict):
     l1_origin_message: Optional[MessageToL2]
     events: List[Event]
     # Common
-    txn_hash: str
-    actual_fee: str
-    status: str
+    transaction_hash: TxnHash
+    actual_fee: Felt
+    status: TxnStatus
     statusData: Optional[str]
+    block_hash: BlockHash
+    block_number: BlockNumber
 
 
 class RpcDeclareReceipt(TypedDict):
@@ -821,10 +915,25 @@ class RpcDeclareReceipt(TypedDict):
     TypedDict for rpc declare transaction receipt
     """
     # Common
-    txn_hash: str
-    actual_fee: str
-    status: str
+    transaction_hash: TxnHash
+    actual_fee: Felt
+    status: TxnStatus
     statusData: Optional[str]
+    block_hash: BlockHash
+    block_number: BlockNumber
+
+
+class RpcDeployReceipt(TypedDict):
+    """
+    TypedDict for rpc declare transaction receipt
+    """
+    # Common
+    transaction_hash: TxnHash
+    actual_fee: Felt
+    status: TxnStatus
+    statusData: Optional[str]
+    block_hash: BlockHash
+    block_number: BlockNumber
 
 
 def rpc_invoke_receipt(txr: TransactionReceipt) -> RpcInvokeReceipt:
@@ -988,28 +1097,27 @@ def parse_body(body: dict) -> Tuple[Callable, Union[List, dict], int]:
     Parse rpc call body to function name and params
     """
     methods = {
-        "getBlockByNumber": get_block_by_number,
-        "getBlockByHash": get_block_by_hash,
-        "getStateUpdateByHash": get_state_update_by_hash,
+        "getBlockWithTxHashes": get_block_with_tx_hashes,
+        "getBlockWithTxs": get_block_with_txs,
+        "getStateUpdate": get_state_update,
         "getStorageAt": get_storage_at,
         "getTransactionByHash": get_transaction_by_hash,
-        "getTransactionByBlockHashAndIndex": get_transaction_by_block_hash_and_index,
-        "getTransactionByBlockNumberAndIndex": get_transaction_by_block_number_and_index,
+        "starknet_getTransactionByBlockIdAndIndex": get_transaction_by_block_id_and_index,
         "getTransactionReceipt": get_transaction_receipt,
-        "getCode": get_code,
-        "getBlockTransactionCountByHash": get_block_transaction_count_by_hash,
-        "getBlockTransactionCountByNumber": get_block_transaction_count_by_number,
+        "getClass": get_class,
+        "getClassHashAt": get_class_hash_at,
+        "getClassAt": get_class_at,
+        "getBlockTransactionCount": get_block_transaction_count,
         "call": call,
-        "blockNumber": get_block_number,
+        "estimateFee": estimate_fee,
+        "blockNumber": block_number,
+        "blockHashAndNumber": block_hash_and_number,
         "chainId": chain_id,
         "pendingTransactions": pending_transactions,
         "protocolVersion": protocol_version,
         "syncing": syncing,
         "getEvents": get_events,
-        "getClass": get_class,
-        "getClassHashAt": get_class_hash_at,
-        "getClassAt": get_class_at,
-        "estimateFee": estimate_fee,
+        "getNonce": get_nonce,
         "addInvokeTransaction": add_invoke_transaction,
         "addDeclareTransaction": add_declare_transaction,
         "addDeployTransaction": add_deploy_transaction,
