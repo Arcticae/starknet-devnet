@@ -807,7 +807,7 @@ def rpc_state_update(state_update: BlockStateUpdate) -> RpcStateUpdate:
         _contracts = []
         for contract in state_update.state_diff.declared_contracts:
             diff: RpcDeclaredContractDiff = {
-                "class_hash": rpc_felt(contract.class_hash)
+                "class_hash": rpc_felt(contract) #TODO contract.class_hash ?
             }
             _contracts.append(diff)
         return _contracts
@@ -834,27 +834,6 @@ def rpc_state_update(state_update: BlockStateUpdate) -> RpcStateUpdate:
         }
     }
     return rpc_state
-
-
-# def rpc_state_diff_contract(contract: dict) -> dict:
-#     """
-#     Convert gateway contract state diff to rpc contract state diff
-#     """
-#     return {
-#         "address": contract["address"],
-#         "contract_hash": f"0x{contract['contract_hash']}",
-#     }
-
-
-# def rpc_state_diff_storage(contract: dict) -> dict:
-#     """
-#     Convert gateway storage state diff to rpc storage state diff
-#     """
-#     return {
-#         "address": contract["address"],
-#         "key": contract["key"],
-#         "value": contract["value"],
-#     }
 
 
 class RpcInvokeTransactionResult(TypedDict):
