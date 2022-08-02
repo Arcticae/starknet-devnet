@@ -10,7 +10,8 @@ import json
 
 from typing import Callable, Union, List, Tuple, Optional, Any
 from typing_extensions import TypedDict, Literal
-from flask import Blueprint, request
+from flask import Blueprint
+from flask import request as flaskRequest
 from marshmallow.exceptions import MarshmallowError
 
 from starkware.starknet.services.api.contract_class import ContractClass
@@ -49,9 +50,15 @@ BlockNumber = int
 BlockTag = Literal["latest", "pending"]
 
 class BlockHashDict(TypedDict):
+    """
+    TypedDict class for BlockId with block hash
+    """
     block_hash: Felt
 
 class BlockNumberDict(TypedDict):
+    """
+    TypedDict class for BlockId with block number
+    """
     block_number: int
 
 BlockId = Union[BlockHashDict, BlockNumberDict, BlockTag]
@@ -190,7 +197,7 @@ async def base_route():
     """
     Base route for RPC calls
     """
-    method, args, message_id = parse_body(request.json)
+    method, args, message_id = parse_body(flaskRequest.json)
 
     try:
         result = await method(*args) if isinstance(args, list) else await method(**args)
@@ -444,7 +451,7 @@ def rpc_fee_estimate(estimate_fee) -> dict:
         "gas_price": hex(estimate_fee["gas_price"]),
         "overall_fee": hex(estimate_fee["overall_fee"]),
     }
-    return
+    return result
 
 
 async def estimate_fee(request: RpcInvokeTransaction, block_id: BlockId) -> dict:
