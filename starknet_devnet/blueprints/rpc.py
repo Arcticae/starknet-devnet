@@ -40,7 +40,7 @@ from ..util import StarknetDevnetException
 
 rpc = Blueprint("rpc", __name__, url_prefix="/rpc")
 
-# PROTOCOL_VERSION = "0.31.0" #TODO
+PROTOCOL_VERSION = "0.31.0" #TODO
 
 Felt = str
 
@@ -173,6 +173,18 @@ def rpc_deploy_transaction(transaction: DeploySpecificInfo) -> RpcDeployTransact
     return transaction
 
 
+def block_tag_to_block_number(block_id: BlockId) -> BlockId:
+    """
+    Changes block_id from tag to dict with "block_number" field
+    """
+    if isinstance(block_id, str):
+        if block_id == "pending":
+            raise RpcError(code=-1, message="Calls with block_hash == 'pending' are not supported currently.")
+        return {"block_number": state.starknet_wrapper.blocks.get_number_of_blocks() - 1}
+
+    return block_id
+
+
 @rpc.route("", methods=["POST"])
 async def base_route():
     """
@@ -194,10 +206,10 @@ async def get_block_with_tx_hashes(block_id: BlockId) -> dict:
     """
     Get block information with transaction hashes given the block id
     """
+    block_id = block_tag_to_block_number(block_id)
+
     try:
-        if isinstance(block_id, str):
-            result = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id)
-        elif "block_hash" in block_id:
+        if "block_hash" in block_id:
             result = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id["block_hash"])
         else:
             result = state.starknet_wrapper.blocks.get_by_number(block_number=block_id["block_number"])
@@ -211,10 +223,10 @@ async def get_block_with_txs(block_id: BlockId) -> dict:
     """
     Get block information with full transactions given the block id
     """
+    block_id = block_tag_to_block_number(block_id)
+
     try:
-        if isinstance(block_id, str):
-            result = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id)
-        elif "block_hash" in block_id:
+        if "block_hash" in block_id:
             result = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id["block_hash"])
         else:
             result = state.starknet_wrapper.blocks.get_by_number(block_number=block_id["block_number"])
@@ -228,10 +240,10 @@ async def get_state_update(block_id: BlockId) -> dict:
     """
     Get the information about the result of executing the requested block
     """
+    block_id = block_tag_to_block_number(block_id)
+
     try:
-        if isinstance(block_id, str):
-            result = state.starknet_wrapper.blocks.get_state_update(block_hash=block_id)
-        elif "block_hash" in block_id:
+        if "block_hash" in block_id:
             result = state.starknet_wrapper.blocks.get_state_update(block_hash=block_id["block_hash"])
         else:
             result = state.starknet_wrapper.blocks.get_state_update(block_number=block_id["block_number"])
@@ -245,7 +257,7 @@ async def get_storage_at(contract_address: Address, key: str, block_id: BlockId)
     """
     Get the value of the storage at the given address and key
     """
-    if block_hash != "latest":
+    if block_id != "latest":
         # By RPC here we should return `24 invalid block hash` but in this case I believe it's more
         # descriptive to the user to use a custom error
         raise RpcError(code=-1, message="Calls with block_hash != 'latest' are not supported currently.")
@@ -278,10 +290,10 @@ async def get_transaction_by_block_id_and_index(block_id: BlockId, index: int) -
     """
     Get the details of a transaction by a given block id and index
     """
+    block_id = block_tag_to_block_number(block_id)
+
     try:
-        if isinstance(block_id, str):
-            block = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id)
-        elif "block_hash" in block_id:
+        if "block_hash" in block_id:
             block = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id["block_hash"])
         else:
             block = state.starknet_wrapper.blocks.get_by_number(block_number=block_id["block_number"])
@@ -370,10 +382,10 @@ async def get_block_transaction_count(block_id: BlockId) -> int:
     """
     Get the number of transactions in a block given a block id
     """
+    block_id = block_tag_to_block_number(block_id)
+
     try:
-        if isinstance(block_id, str):
-            block = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id)
-        elif "block_hash" in block_id:
+        if "block_hash" in block_id:
             block = state.starknet_wrapper.blocks.get_by_hash(block_hash=block_id["block_hash"])
         else:
             block = state.starknet_wrapper.blocks.get_by_number(block_number=block_id["block_number"])
@@ -383,24 +395,24 @@ async def get_block_transaction_count(block_id: BlockId) -> int:
     return len(block.transactions)
 
 
-async def call(contract_address: str, entry_point_selector: str, calldata: list, block_id: BlockId) -> List[Felt]:
+async def call(request: RpcInvokeTransaction, block_id: BlockId) -> List[Felt]:
     """
     Call a starknet function without creating a StarkNet transaction
     """
     request_body = {
-        "contract_address": contract_address,
-        "entry_point_selector": entry_point_selector,
-        "calldata": calldata
+        "contract_address": request["contract_address"],
+        "entry_point_selector": request["entry_point_selector"],
+        "calldata": request["calldata"]
     }
 
     # For now, we only support 'latest' block, support for specific blocks
     # in devnet is more complicated if possible at all
-    if block_hash != "latest":
-        # By RPC here we should return `24 invalid block hash` but in this case I believe it's more
+    if block_id != "latest":
+        # By RPC here we should return `24 invalid block id` but in this case I believe it's more
         # descriptive to the user to use a custom error
-        raise RpcError(code=-1, message="Calls with block_hash != 'latest' are not supported currently.")
+        raise RpcError(code=-1, message="Calls with block_id != 'latest' are not supported currently.")
 
-    if not state.starknet_wrapper.contracts.is_deployed(int(contract_address, 16)):
+    if not state.starknet_wrapper.contracts.is_deployed(int(request["contract_address"], 16)):
         raise RpcError(code=20, message="Contract not found")
 
     try:
@@ -408,7 +420,7 @@ async def call(contract_address: str, entry_point_selector: str, calldata: list,
     except StarknetDevnetException as ex:
         raise RpcError(code=-1, message=ex.message) from ex
     except StarkException as ex:
-        if f"Entry point {entry_point_selector} not found" in ex.message:
+        if f'Entry point {request["entry_point_selector"]} not found' in ex.message:
             raise RpcError(code=21, message="Invalid message selector") from ex
         if "While handling calldata" in ex.message:
             raise RpcError(code=22, message="Invalid call data") from ex
@@ -428,7 +440,9 @@ async def block_number() -> int:
     """
     number_of_blocks = state.starknet_wrapper.blocks.get_number_of_blocks()
     if number_of_blocks == 0:
-        raise RpcError(code=32, message="There are no blocks") from ex
+        raise RpcError(code=32, message="There are no blocks")
+
+    return number_of_blocks - 1
 
 
 async def block_hash_and_number() -> dict:

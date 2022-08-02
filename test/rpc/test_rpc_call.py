@@ -16,10 +16,12 @@ def test_call(deploy_info):
 
     resp = rpc_call(
         "starknet_call", params={
-            "contract_address": contract_address,
-            "entry_point_selector": hex(get_selector_from_name("get_balance")),
-            "calldata": [],
-            "block_hash": "latest"
+            "request": {
+                "contract_address": contract_address,
+                "entry_point_selector": hex(get_selector_from_name("get_balance")),
+                "calldata": [],
+            },
+            "block_id": "latest"
         }
     )
     result = resp["result"]
@@ -36,10 +38,12 @@ def test_call_raises_on_incorrect_contract_address(deploy_info):
     """
     ex = rpc_call(
         "starknet_call", params={
-            "contract_address": "0x07b529269b82f3f3ebbb2c463a9e1edaa2c6eea8fa308ff70b30398766a2e20c",
-            "entry_point_selector": hex(get_selector_from_name("get_balance")),
-            "calldata": [],
-            "block_hash": "latest"
+            "request": {
+                "contract_address": "0x07b529269b82f3f3ebbb2c463a9e1edaa2c6eea8fa308ff70b30398766a2e20c",
+                "entry_point_selector": hex(get_selector_from_name("get_balance")),
+                "calldata": [],
+            },
+            "block_id": "latest"
         }
     )
 
@@ -57,10 +61,12 @@ def test_call_raises_on_incorrect_selector(deploy_info):
 
     ex = rpc_call(
         "starknet_call", params={
-            "contract_address": contract_address,
-            "entry_point_selector": hex(get_selector_from_name("xxxxxxx")),
-            "calldata": [],
-            "block_hash": "latest"
+            "request": {
+                "contract_address": contract_address,
+                "entry_point_selector": hex(get_selector_from_name("xxxxxxx")),
+                "calldata": [],
+            },
+            "block_id": "latest"
         }
     )
 
@@ -78,10 +84,12 @@ def test_call_raises_on_invalid_calldata(deploy_info):
 
     ex = rpc_call(
         "starknet_call", params={
-            "contract_address": contract_address,
-            "entry_point_selector": hex(get_selector_from_name("get_balance")),
-            "calldata": ["a", "b", "123"],
-            "block_hash": "latest"
+            "request": {
+                "contract_address": contract_address,
+                "entry_point_selector": hex(get_selector_from_name("get_balance")),
+                "calldata": ["a", "b", "123"],
+            },
+            "block_id": "latest"
         }
     )
 
@@ -101,10 +109,12 @@ def test_call_raises_on_incorrect_block_hash(deploy_info):
 
     ex = rpc_call(
         "starknet_call", params={
-            "contract_address": contract_address,
-            "entry_point_selector": hex(get_selector_from_name("get_balance")),
-            "calldata": [],
-            "block_hash": "0x0"
+            "request": {
+                "contract_address": contract_address,
+                "entry_point_selector": hex(get_selector_from_name("get_balance")),
+                "calldata": [],
+            },
+            "block_id": "0x0"
         }
     )
 
