@@ -265,9 +265,9 @@ async def get_storage_at(contract_address: Address, key: str, block_id: BlockId)
     Get the value of the storage at the given address and key
     """
     if block_id != "latest":
-        # By RPC here we should return `24 invalid block hash` but in this case I believe it's more
+        # By RPC here we should return `24 invalid block id` but in this case I believe it's more
         # descriptive to the user to use a custom error
-        raise RpcError(code=-1, message="Calls with block_hash != 'latest' are not supported currently.")
+        raise RpcError(code=-1, message="Calls with block_id != 'latest' are not supported currently.")
 
     if not state.starknet_wrapper.contracts.is_deployed(int(contract_address, 16)):
         raise RpcError(code=20, message="Contract not found")
