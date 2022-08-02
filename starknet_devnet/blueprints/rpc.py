@@ -427,11 +427,41 @@ async def call(request: RpcInvokeTransaction, block_id: BlockId) -> List[Felt]:
         raise RpcError(code=-1, message=ex.message) from ex
 
 
+class RpcFeeEstimate(TypedDict):
+    """
+    Fee estimate TypedDict for rpc
+    """
+    gas_consumed: NumAsHex
+    gas_price: NumAsHex
+    overall_fee: NumAsHex
+
+def rpc_fee_estimate(estimate_fee) -> dict:
+    """
+    Convert gateway estimate_fee response to rpc_fee_estimate
+    """
+    result: RpcFeeEstimate = {
+        "gas_consumed": hex(estimate_fee["gas_usage"]),
+        "gas_price": hex(estimate_fee["gas_price"]),
+        "overall_fee": hex(estimate_fee["overall_fee"]),
+    }
+    return
+
+
 async def estimate_fee(request: RpcInvokeTransaction, block_id: BlockId) -> dict:
     """
     Estimate the fee for a given StarkNet transaction
     """
-    raise NotImplementedError()
+    invoke_function = InvokeFunction(
+        contract_address=int(request["contract_address"], 16),
+        entry_point_selector=int(request["entry_point_selector"], 16),
+        calldata=[int(data, 16) for data in request["calldata"]],
+        max_fee=int(request["max_fee"], 16),
+        version=int(request["version"], 16),
+        signature=[int(data, 16) for data in request["signature"]],
+    )
+
+    fee_response = await state.starknet_wrapper.calculate_actual_fee(invoke_function)
+    return rpc_fee_estimate(fee_response)
 
 
 async def block_number() -> int:
