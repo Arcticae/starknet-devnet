@@ -175,7 +175,7 @@ def rpc_deploy_transaction(transaction: DeploySpecificInfo) -> RpcDeployTransact
 
 def update_block_id(block_id: BlockId) -> BlockId:
     """
-    Updates block_id if it is an instance of str
+    Changes block_id from string to dict
     """
     if isinstance(block_id, str):
         if block_id == "pending":
@@ -240,8 +240,8 @@ async def get_state_update(block_id: BlockId) -> dict:
     """
     Get the information about the result of executing the requested block
     """
-    block_id = update_block_id(block_id
-                               )
+    block_id = update_block_id(block_id)
+
     try:
         if "block_hash" in block_id:
             result = state.starknet_wrapper.blocks.get_state_update(block_hash=block_id["block_hash"])
