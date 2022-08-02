@@ -4,11 +4,10 @@ Tests RPC miscellaneous
 
 from __future__ import annotations
 
-import json
-
 from starkware.starknet.public.abi import get_storage_var_address
 from starkware.starknet.core.os.class_hash import compute_class_hash
 
+from starknet_devnet.blueprints.rpc import PROTOCOL_VERSION
 from starknet_devnet.general_config import DEFAULT_GENERAL_CONFIG
 
 from .rpc_utils import rpc_call, gateway_call, get_block_with_transaction, pad_zero
@@ -79,37 +78,37 @@ def test_get_state_update_by_hash(deploy_info, invoke_info, contract_class):
     }
 
 
-def test_get_code(deploy_info):
-    """
-    Get contract code
-    """
-    contract_address: str = deploy_info["address"]
-    contract: dict = gateway_call(
-        "get_code", contractAddress=contract_address
-    )
-
-    resp = rpc_call(
-        "starknet_getCode", params={"contract_address": contract_address}
-    )
-    code = resp["result"]
-
-    assert code["bytecode"] == contract["bytecode"]
-    assert json.loads(code["abi"]) == contract["abi"]
-
-
-# pylint: disable=unused-argument
-def test_get_code_raises_on_incorrect_contract(deploy_info):
-    """
-    Get contract code by incorrect contract address
-    """
-    ex = rpc_call(
-        "starknet_getCode", params={"contract_address": "0x0"}
-    )
-
-    assert ex["error"] == {
-        "code": 20,
-        "message": "Contract not found"
-    }
+# def test_get_code(deploy_info):
+#     """
+#     Get contract code
+#     """
+#     contract_address: str = deploy_info["address"]
+#     contract: dict = gateway_call(
+#         "get_code", contractAddress=contract_address
+#     )
+#
+#     resp = rpc_call(
+#         "starknet_getCode", params={"contract_address": contract_address}
+#     )
+#     code = resp["result"]
+#
+#     assert code["bytecode"] == contract["bytecode"]
+#     assert json.loads(code["abi"]) == contract["abi"]
+#
+#
+# # pylint: disable=unused-argument
+# def test_get_code_raises_on_incorrect_contract(deploy_info):
+#     """
+#     Get contract code by incorrect contract address
+#     """
+#     ex = rpc_call(
+#         "starknet_getCode", params={"contract_address": "0x0"}
+#     )
+#
+#     assert ex["error"] == {
+#         "code": 20,
+#         "message": "Contract not found"
+#     }
 
 
 def test_chain_id(deploy_info):
@@ -129,11 +128,9 @@ def test_protocol_version(deploy_info):
     """
     Test protocol version
     """
-    protocol_version = "0.15.0"
-
     resp = rpc_call("starknet_protocolVersion", params={})
     version_hex: str = resp["result"]
     version_bytes = bytes.fromhex(version_hex.lstrip("0x"))
     version = version_bytes.decode("utf-8")
 
-    assert version == protocol_version
+    assert version == PROTOCOL_VERSION
