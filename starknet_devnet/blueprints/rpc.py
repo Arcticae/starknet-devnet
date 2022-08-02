@@ -40,7 +40,7 @@ from ..util import StarknetDevnetException
 
 rpc = Blueprint("rpc", __name__, url_prefix="/rpc")
 
-# PROTOCOL_VERSION = "0.31.0" #TODO
+PROTOCOL_VERSION = "0.31.0" #TODO
 
 Felt = str
 
@@ -383,24 +383,24 @@ async def get_block_transaction_count(block_id: BlockId) -> int:
     return len(block.transactions)
 
 
-async def call(contract_address: str, entry_point_selector: str, calldata: list, block_id: BlockId) -> List[Felt]:
+async def call(request: RpcInvokeTransaction, block_id: BlockId) -> List[Felt]:
     """
     Call a starknet function without creating a StarkNet transaction
     """
     request_body = {
-        "contract_address": contract_address,
-        "entry_point_selector": entry_point_selector,
-        "calldata": calldata
+        "contract_address": request["contract_address"],
+        "entry_point_selector": request["entry_point_selector"],
+        "calldata": request["calldata"]
     }
 
     # For now, we only support 'latest' block, support for specific blocks
     # in devnet is more complicated if possible at all
-    if block_hash != "latest":
+    if block_id != "latest":
         # By RPC here we should return `24 invalid block hash` but in this case I believe it's more
         # descriptive to the user to use a custom error
-        raise RpcError(code=-1, message="Calls with block_hash != 'latest' are not supported currently.")
+        raise RpcError(code=-1, message="Calls with block_id != 'latest' are not supported currently.")
 
-    if not state.starknet_wrapper.contracts.is_deployed(int(contract_address, 16)):
+    if not state.starknet_wrapper.contracts.is_deployed(int(request["contract_address"], 16)):
         raise RpcError(code=20, message="Contract not found")
 
     try:
@@ -408,7 +408,7 @@ async def call(contract_address: str, entry_point_selector: str, calldata: list,
     except StarknetDevnetException as ex:
         raise RpcError(code=-1, message=ex.message) from ex
     except StarkException as ex:
-        if f"Entry point {entry_point_selector} not found" in ex.message:
+        if f'Entry point {request["entry_point_selector"]} not found' in ex.message:
             raise RpcError(code=21, message="Invalid message selector") from ex
         if "While handling calldata" in ex.message:
             raise RpcError(code=22, message="Invalid call data") from ex
@@ -428,7 +428,9 @@ async def block_number() -> int:
     """
     number_of_blocks = state.starknet_wrapper.blocks.get_number_of_blocks()
     if number_of_blocks == 0:
-        raise RpcError(code=32, message="There are no blocks") from ex
+        raise RpcError(code=32, message="There are no blocks")
+
+    return number_of_blocks - 1
 
 
 async def block_hash_and_number() -> dict:
