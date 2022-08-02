@@ -396,7 +396,7 @@ async def call(request: RpcInvokeTransaction, block_id: BlockId) -> List[Felt]:
     # For now, we only support 'latest' block, support for specific blocks
     # in devnet is more complicated if possible at all
     if block_id != "latest":
-        # By RPC here we should return `24 invalid block hash` but in this case I believe it's more
+        # By RPC here we should return `24 invalid block id` but in this case I believe it's more
         # descriptive to the user to use a custom error
         raise RpcError(code=-1, message="Calls with block_id != 'latest' are not supported currently.")
 
