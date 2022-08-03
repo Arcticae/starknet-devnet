@@ -1,7 +1,7 @@
 """
 Tests RPC contract class
 """
-
+from starknet_devnet.blueprints.rpc import BlockId
 from .rpc_utils import rpc_call
 
 
@@ -31,10 +31,11 @@ def test_get_class_hash_at(deploy_info, class_hash):
     Test get contract class at given hash
     """
     contract_address: str = deploy_info["address"]
+    block_id: BlockId = "latest"
 
     resp = rpc_call(
         "starknet_getClassHashAt",
-        params={"contract_address": contract_address}
+        params={"contract_address": contract_address, "block_id": block_id}
     )
     rpc_class_hash = resp["result"]
 
@@ -46,10 +47,11 @@ def test_get_class_at(deploy_info):
     Test get contract class at given contract address
     """
     contract_address: str = deploy_info["address"]
+    block_id: BlockId = "latest"
 
     resp = rpc_call(
         "starknet_getClassAt",
-        params={"contract_address": contract_address}
+        params={"contract_address": contract_address, "block_id": block_id}
     )
     contract_class = resp["result"]
 

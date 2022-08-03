@@ -172,7 +172,7 @@ def rpc_deploy_transaction(transaction: DeploySpecificInfo) -> RpcDeployTransact
         "transaction_hash": rpc_felt(transaction.transaction_hash),
         "class_hash": rpc_felt(transaction.contract_address),
         "version": hex(0x0),
-        "type": json.dumps(transaction.tx_type, default=lambda x: x.name),
+        "type": transaction.tx_type.name,
         "contract_address": rpc_felt(transaction.contract_address),
         "contract_address_salt": rpc_felt(transaction.contract_address_salt),
         "constructor_calldata": [rpc_felt(data) for data in transaction.constructor_calldata],
@@ -265,8 +265,6 @@ async def get_storage_at(contract_address: Address, key: str, block_id: BlockId)
     Get the value of the storage at the given address and key
     """
     if block_id != "latest":
-        # By RPC here we should return `24 invalid block id` but in this case I believe it's more
-        # descriptive to the user to use a custom error
         raise RpcError(code=-1, message="Calls with block_id != 'latest' are not supported currently.")
 
     if not state.starknet_wrapper.contracts.is_deployed(int(contract_address, 16)):
@@ -364,6 +362,9 @@ async def get_class_hash_at(block_id: BlockId, contract_address: Address) -> Fel
     """
     Get the contract class hash in the given block for the contract deployed at the given address
     """
+    if block_id != "latest":
+        raise RpcError(code=-1, message="Calls with block_id != 'latest' are not supported currently.")
+
     try:
         result = state.starknet_wrapper.contracts.get_class_hash_at(address=int(contract_address, 16))
     except StarknetDevnetException as ex:
@@ -376,6 +377,9 @@ async def get_class_at(block_id: BlockId, contract_address: Address) -> dict:
     """
     Get the contract class definition in the given block at the given address
     """
+    if block_id != "latest":
+        raise RpcError(code=-1, message="Calls with block_id != 'latest' are not supported currently.")
+
     try:
         class_hash = state.starknet_wrapper.contracts.get_class_hash_at(address=int(contract_address, 16))
         result = state.starknet_wrapper.contracts.get_class_by_hash(class_hash=class_hash)
@@ -470,8 +474,6 @@ async def estimate_fee(request: RpcInvokeTransaction, block_id: BlockId) -> dict
     Estimate the fee for a given StarkNet transaction
     """
     if block_id != "latest":
-        # By RPC here we should return `24 invalid block id` but in this case I believe it's more
-        # descriptive to the user to use a custom error
         raise RpcError(code=-1, message="Calls with block_id != 'latest' are not supported currently.")
 
     invoke_function = InvokeFunction(
@@ -1148,7 +1150,7 @@ def parse_body(body: dict) -> Tuple[Callable, Union[List, dict], int]:
         "getStateUpdate": get_state_update,
         "getStorageAt": get_storage_at,
         "getTransactionByHash": get_transaction_by_hash,
-        "starknet_getTransactionByBlockIdAndIndex": get_transaction_by_block_id_and_index,
+        "getTransactionByBlockIdAndIndex": get_transaction_by_block_id_and_index,
         "getTransactionReceipt": get_transaction_receipt,
         "getClass": get_class,
         "getClassHashAt": get_class_hash_at,
