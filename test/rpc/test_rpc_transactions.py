@@ -114,53 +114,59 @@ def test_get_transaction_by_hash_raises_on_incorrect_hash(deploy_info):
     }
 
 
-def test_get_transaction_by_block_hash_and_index(deploy_info):
+def test_get_transaction_by_block_id_and_index(deploy_info):
     """
-    Get transaction by block hash and transaction index
+    Get transaction by block id and transaction index
     """
     block = get_block_with_transaction(deploy_info["transaction_hash"])
     transaction_hash: str = deploy_info["transaction_hash"]
     contract_address: str = deploy_info["address"]
-    block_hash: str = block["block_hash"]
+    block_number: str = block["block_number"]
     index: int = 0
 
     resp = rpc_call(
-        "starknet_getTransactionByBlockHashAndIndex", params={
-            "block_hash": block_hash,
+        "starknet_getTransactionByBlockIdAndIndex", params={
+            "block_id": {
+                "block_number": block_number,
+            },
             "index": index
         }
     )
     transaction = resp["result"]
 
+    print(transaction)
+
     assert transaction == {
-        "txn_hash": pad_zero(transaction_hash),
-        "contract_address": contract_address,
-        "max_fee": "0x0",
-        "calldata": [],
-        "entry_point_selector": None,
-        "signature": [],
-        "version": "0x0"
+        'class_hash': '0x022675a4cfedcb8e029e31e71d282ee40b058134424d7560dbc5c3cdbd087d3d',
+        'constructor_calldata': [],
+        'contract_address': pad_zero(contract_address),
+        'contract_address_salt': '0x02',
+        'transaction_hash': pad_zero(transaction_hash),
+        'type': '"DEPLOY"',
+        'version': '0x0'
     }
 
 
-def test_get_transaction_by_block_hash_and_index_raises_on_incorrect_block_hash(deploy_info):
+def test_get_transaction_by_block_id_and_index_raises_on_incorrect_block_hash():
     """
-    Get transaction by incorrect block hash
+    Get transaction by incorrect block id
     """
     ex = rpc_call(
-        "starknet_getTransactionByBlockHashAndIndex", params={
-            "block_hash": "0x0",
+        "starknet_getTransactionByBlockIdAndIndex", params={
+            "block_id": {
+                "block_hash": "0x0"
+            },
             "index": 0
         }
     )
 
     assert ex["error"] == {
         "code": 24,
-        "message": "Invalid block hash"
+        "message": "Invalid block id"
     }
 
 
-def test_get_transaction_by_block_hash_and_index_raises_on_incorrect_index(deploy_info):
+def test_get_transaction_by_block_id_and_index_raises_on_incorrect_index(deploy_info):
     """
     Get transaction by block hash and incorrect transaction index
     """
@@ -168,74 +174,11 @@ def test_get_transaction_by_block_hash_and_index_raises_on_incorrect_index(deplo
     block_hash: str = block["block_hash"]
 
     ex = rpc_call(
-        "starknet_getTransactionByBlockHashAndIndex", params={
-            "block_hash": block_hash,
+        "starknet_getTransactionByBlockIdAndIndex", params={
+            "block_id": {
+                "block_hash": block_hash,
+            },
             "index": 999999
-        }
-    )
-
-    assert ex["error"] == {
-        "code": 27,
-        "message": "Invalid transaction index in a block"
-    }
-
-
-def test_get_transaction_by_block_number_and_index(deploy_info):
-    """
-    Get transaction by block number and transaction index
-    """
-    transaction_hash: str = deploy_info["transaction_hash"]
-    contract_address: str = deploy_info["address"]
-    block = get_block_with_transaction(transaction_hash)
-    block_number: int = block["block_number"]
-    index: int = 0
-
-    resp = rpc_call(
-        "starknet_getTransactionByBlockNumberAndIndex", params={
-            "block_number": block_number,
-            "index": index
-        }
-    )
-    transaction = resp["result"]
-
-    assert transaction == {
-        "txn_hash": pad_zero(transaction_hash),
-        "contract_address": contract_address,
-        "max_fee": "0x0",
-        "calldata": [],
-        "entry_point_selector": None,
-        "signature": [],
-        "version": "0x0"
-    }
-
-
-def test_get_transaction_by_block_number_and_index_raises_on_incorrect_block_number(deploy_info):
-    """
-    Get transaction by incorrect block number
-    """
-    ex = rpc_call(
-        "starknet_getTransactionByBlockNumberAndIndex", params={
-            "block_number": 99999,
-            "index": 0
-        }
-    )
-
-    assert ex["error"] == {
-        "code": 26,
-        "message": "Invalid block number"
-    }
-
-
-def test_get_transaction_by_block_number_and_index_raises_on_incorrect_index(deploy_info):
-    """
-    Get transaction by block hash and incorrect transaction index
-    """
-    block_number: int = 0
-
-    ex = rpc_call(
-        "starknet_getTransactionByBlockNumberAndIndex", params={
-            "block_number": block_number,
-            "index": 99999
         }
     )
 
