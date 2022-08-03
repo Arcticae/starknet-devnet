@@ -14,13 +14,13 @@ def test_get_storage_at(deploy_info):
     """
     contract_address: str = deploy_info["address"]
     key: str = hex(get_storage_var_address("balance"))
-    block_hash: str = "latest"
+    block_id: str = "latest"
 
     resp = rpc_call(
         "starknet_getStorageAt", params={
             "contract_address": contract_address,
             "key": key,
-            "block_hash": block_hash,
+            "block_id": block_id,
         }
     )
     storage = resp["result"]
@@ -34,13 +34,13 @@ def test_get_storage_at_raises_on_incorrect_contract(deploy_info):
     Get storage at incorrect contract
     """
     key: str = hex(get_storage_var_address("balance"))
-    block_hash: str = "latest"
+    block_id: str = "latest"
 
     ex = rpc_call(
         "starknet_getStorageAt", params={
             "contract_address": "0x0",
             "key": key,
-            "block_hash": block_hash,
+            "block_id": block_id,
         }
     )
 
@@ -60,13 +60,13 @@ def test_get_storage_at_raises_on_incorrect_key(deploy_info):
     block = get_block_with_transaction(deploy_info["transaction_hash"])
 
     contract_address: str = deploy_info["address"]
-    block_hash: str = block["block_hash"]
+    block_id: str = block["block_id"]
 
     ex = rpc_call(
         "starknet_getStorageAt", params={
             "contract_address": contract_address,
             "key": "0x0",
-            "block_hash": block_hash,
+            "block_id": block_id,
         }
     )
 
@@ -76,12 +76,12 @@ def test_get_storage_at_raises_on_incorrect_key(deploy_info):
     }
 
 
-# This will fail as get_storage_at only supports "latest" as block_hash
+# This will fail as get_storage_at only supports "latest" as block_id
 # and will fail with custom exception if other is provided
 @pytest.mark.xfail
-def test_get_storage_at_raises_on_incorrect_block_hash(deploy_info):
+def test_get_storage_at_raises_on_incorrect_block_id(deploy_info):
     """
-    Get storage at incorrect block hash
+    Get storage at incorrect block id
     """
 
     contract_address: str = deploy_info["address"]
@@ -91,11 +91,11 @@ def test_get_storage_at_raises_on_incorrect_block_hash(deploy_info):
         "starknet_getStorageAt", params={
             "contract_address": contract_address,
             "key": key,
-            "block_hash": "0x0",
+            "block_id": "0x0",
         }
     )
 
     assert ex["error"] == {
         "code": 24,
-        "message": "Invalid block hash"
+        "message": "Invalid block id"
     }

@@ -10,7 +10,8 @@ import json
 
 from typing import Callable, Union, List, Tuple, Optional, Any
 from typing_extensions import TypedDict, Literal
-from flask import Blueprint, request
+from flask import Blueprint
+from flask import request as flaskRequest
 from marshmallow.exceptions import MarshmallowError
 
 from starkware.starknet.services.api.contract_class import ContractClass
@@ -49,9 +50,15 @@ BlockNumber = int
 BlockTag = Literal["latest", "pending"]
 
 class BlockHashDict(TypedDict):
+    """
+    TypedDict class for BlockId with block hash
+    """
     block_hash: Felt
 
 class BlockNumberDict(TypedDict):
+    """
+    TypedDict class for BlockId with block number
+    """
     block_number: int
 
 BlockId = Union[BlockHashDict, BlockNumberDict, BlockTag]
@@ -190,7 +197,7 @@ async def base_route():
     """
     Base route for RPC calls
     """
-    method, args, message_id = parse_body(request.json)
+    method, args, message_id = parse_body(flaskRequest.json)
 
     try:
         result = await method(*args) if isinstance(args, list) else await method(**args)
@@ -258,9 +265,9 @@ async def get_storage_at(contract_address: Address, key: str, block_id: BlockId)
     Get the value of the storage at the given address and key
     """
     if block_id != "latest":
-        # By RPC here we should return `24 invalid block hash` but in this case I believe it's more
+        # By RPC here we should return `24 invalid block id` but in this case I believe it's more
         # descriptive to the user to use a custom error
-        raise RpcError(code=-1, message="Calls with block_hash != 'latest' are not supported currently.")
+        raise RpcError(code=-1, message="Calls with block_id != 'latest' are not supported currently.")
 
     if not state.starknet_wrapper.contracts.is_deployed(int(contract_address, 16)):
         raise RpcError(code=20, message="Contract not found")
@@ -427,11 +434,57 @@ async def call(request: RpcInvokeTransaction, block_id: BlockId) -> List[Felt]:
         raise RpcError(code=-1, message=ex.message) from ex
 
 
+class FeeEstimate(TypedDict):
+    """
+    Fee estimate TypedDict for rpc
+    """
+    overall_fee: int
+    unit: str
+    gas_price: int
+    gas_usage: int
+
+
+class RpcFeeEstimate(TypedDict):
+    """
+    Fee estimate TypedDict for rpc
+    """
+    gas_consumed: NumAsHex
+    gas_price: NumAsHex
+    overall_fee: NumAsHex
+
+
+def rpc_fee_estimate(fee_estimate: FeeEstimate) -> dict:
+    """
+    Convert gateway estimate_fee response to rpc_fee_estimate
+    """
+    result: RpcFeeEstimate = {
+        "gas_consumed": hex(fee_estimate["gas_usage"]),
+        "gas_price": hex(fee_estimate["gas_price"]),
+        "overall_fee": hex(fee_estimate["overall_fee"]),
+    }
+    return result
+
+
 async def estimate_fee(request: RpcInvokeTransaction, block_id: BlockId) -> dict:
     """
     Estimate the fee for a given StarkNet transaction
     """
-    raise NotImplementedError()
+    if block_id != "latest":
+        # By RPC here we should return `24 invalid block id` but in this case I believe it's more
+        # descriptive to the user to use a custom error
+        raise RpcError(code=-1, message="Calls with block_id != 'latest' are not supported currently.")
+
+    invoke_function = InvokeFunction(
+        contract_address=int(request["contract_address"], 16),
+        entry_point_selector=int(request["entry_point_selector"], 16),
+        calldata=[int(data, 16) for data in request["calldata"]],
+        max_fee=int(request["max_fee"], 16),
+        version=int(request["version"], 16),
+        signature=[int(data, 16) for data in request["signature"]],
+    )
+
+    fee_response = await state.starknet_wrapper.calculate_actual_fee(invoke_function)
+    return rpc_fee_estimate(fee_response)
 
 
 async def block_number() -> int:
@@ -770,7 +823,7 @@ def rpc_state_update(state_update: BlockStateUpdate) -> RpcStateUpdate:
         _contracts = []
         for contract in state_update.state_diff.declared_contracts:
             diff: RpcDeclaredContractDiff = {
-                "class_hash": rpc_felt(contract.class_hash)
+                "class_hash": rpc_felt(contract) #TODO contract.class_hash ?
             }
             _contracts.append(diff)
         return _contracts
@@ -797,27 +850,6 @@ def rpc_state_update(state_update: BlockStateUpdate) -> RpcStateUpdate:
         }
     }
     return rpc_state
-
-
-# def rpc_state_diff_contract(contract: dict) -> dict:
-#     """
-#     Convert gateway contract state diff to rpc contract state diff
-#     """
-#     return {
-#         "address": contract["address"],
-#         "contract_hash": f"0x{contract['contract_hash']}",
-#     }
-
-
-# def rpc_state_diff_storage(contract: dict) -> dict:
-#     """
-#     Convert gateway storage state diff to rpc storage state diff
-#     """
-#     return {
-#         "address": contract["address"],
-#         "key": contract["key"],
-#         "value": contract["value"],
-#     }
 
 
 class RpcInvokeTransactionResult(TypedDict):
