@@ -134,15 +134,13 @@ def test_get_transaction_by_block_id_and_index(deploy_info):
     )
     transaction = resp["result"]
 
-    print(transaction)
-
     assert transaction == {
         'class_hash': '0x022675a4cfedcb8e029e31e71d282ee40b058134424d7560dbc5c3cdbd087d3d',
         'constructor_calldata': [],
         'contract_address': pad_zero(contract_address),
         'contract_address_salt': '0x02',
         'transaction_hash': pad_zero(transaction_hash),
-        'type': '"DEPLOY"',
+        'type': "DEPLOY",
         'version': '0x0'
     }
 

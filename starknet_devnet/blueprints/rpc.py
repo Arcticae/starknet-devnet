@@ -172,7 +172,7 @@ def rpc_deploy_transaction(transaction: DeploySpecificInfo) -> RpcDeployTransact
         "transaction_hash": rpc_felt(transaction.transaction_hash),
         "class_hash": rpc_felt(transaction.contract_address),
         "version": hex(0x0),
-        "type": json.dumps(transaction.tx_type, default=lambda x: x.name),
+        "type": transaction.tx_type.name,
         "contract_address": rpc_felt(transaction.contract_address),
         "contract_address_salt": rpc_felt(transaction.contract_address_salt),
         "constructor_calldata": [rpc_felt(data) for data in transaction.constructor_calldata],
