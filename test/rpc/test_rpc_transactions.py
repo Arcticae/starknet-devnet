@@ -37,11 +37,12 @@ def test_get_transaction_by_hash_deploy(deploy_info):
     }
 
 
-def test_get_transaction_by_hash_invoke(invoke_info):
+def test_get_transaction_by_hash_invoke(deploy_info, invoke_info):
     """
     Get transaction by hash
     """
-    block_tx = gateway_call("get_transaction", transactionHash=invoke_info["transaction_hash"])["transaction"]
+    block = get_block_with_transaction(invoke_info["transaction_hash"])
+    block_tx = block["transactions"][0]
     transaction_hash: str = invoke_info["transaction_hash"]
     contract_address: str = invoke_info["address"]
     entry_point_selector: str = invoke_info["entry_point_selector"]
