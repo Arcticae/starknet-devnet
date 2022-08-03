@@ -434,6 +434,16 @@ async def call(request: RpcInvokeTransaction, block_id: BlockId) -> List[Felt]:
         raise RpcError(code=-1, message=ex.message) from ex
 
 
+class FeeEstimate(TypedDict):
+    """
+    Fee estimate TypedDict for rpc
+    """
+    overall_fee: int
+    unit: str
+    gas_price: int
+    gas_usage: int
+
+
 class RpcFeeEstimate(TypedDict):
     """
     Fee estimate TypedDict for rpc
@@ -442,7 +452,8 @@ class RpcFeeEstimate(TypedDict):
     gas_price: NumAsHex
     overall_fee: NumAsHex
 
-def rpc_fee_estimate(fee_estimate) -> dict:
+
+def rpc_fee_estimate(fee_estimate: FeeEstimate) -> dict:
     """
     Convert gateway estimate_fee response to rpc_fee_estimate
     """
@@ -458,6 +469,11 @@ async def estimate_fee(request: RpcInvokeTransaction, block_id: BlockId) -> dict
     """
     Estimate the fee for a given StarkNet transaction
     """
+    if block_id != "latest":
+        # By RPC here we should return `24 invalid block id` but in this case I believe it's more
+        # descriptive to the user to use a custom error
+        raise RpcError(code=-1, message="Calls with block_id != 'latest' are not supported currently.")
+
     invoke_function = InvokeFunction(
         contract_address=int(request["contract_address"], 16),
         entry_point_selector=int(request["entry_point_selector"], 16),
