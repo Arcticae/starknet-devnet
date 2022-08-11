@@ -6,12 +6,14 @@ from __future__ import annotations
 
 from typing import List
 
+import pytest
 from starkware.starknet.definitions import constants
 from starknet_devnet.blueprints.rpc import RpcContractClass, RpcInvokeTransaction
 
-from .rpc_utils import rpc_call, get_block_with_transaction, pad_zero, gateway_call
+from .rpc_utils import rpc_call, get_block_with_transaction, pad_zero
 
 
+@pytest.mark.usefixtures("run_devnet_in_background")
 def test_get_transaction_by_hash_deploy(deploy_info):
     """
     Get transaction by hash
@@ -37,7 +39,8 @@ def test_get_transaction_by_hash_deploy(deploy_info):
     }
 
 
-def test_get_transaction_by_hash_invoke(deploy_info, invoke_info):
+@pytest.mark.usefixtures("run_devnet_in_background", "deploy_info")
+def test_get_transaction_by_hash_invoke(invoke_info):
     """
     Get transaction by hash
     """
@@ -69,6 +72,7 @@ def test_get_transaction_by_hash_invoke(deploy_info, invoke_info):
     }
 
 
+@pytest.mark.usefixtures("run_devnet_in_background")
 def test_get_transaction_by_hash_declare(declare_info):
     """
     Get transaction by hash
@@ -96,8 +100,8 @@ def test_get_transaction_by_hash_declare(declare_info):
     }
 
 
-# pylint: disable=unused-argument
-def test_get_transaction_by_hash_raises_on_incorrect_hash(deploy_info):
+@pytest.mark.usefixtures("run_devnet_in_background", "deploy_info")
+def test_get_transaction_by_hash_raises_on_incorrect_hash():
     """
     Get transaction by incorrect hash
     """
@@ -111,6 +115,7 @@ def test_get_transaction_by_hash_raises_on_incorrect_hash(deploy_info):
     }
 
 
+@pytest.mark.usefixtures("run_devnet_in_background")
 def test_get_transaction_by_block_id_and_index(deploy_info):
     """
     Get transaction by block id and transaction index
@@ -143,6 +148,7 @@ def test_get_transaction_by_block_id_and_index(deploy_info):
     }
 
 
+@pytest.mark.usefixtures("run_devnet_in_background")
 def test_get_transaction_by_block_id_and_index_raises_on_incorrect_block_hash():
     """
     Get transaction by incorrect block id
@@ -162,6 +168,7 @@ def test_get_transaction_by_block_id_and_index_raises_on_incorrect_block_hash():
     }
 
 
+@pytest.mark.usefixtures("run_devnet_in_background")
 def test_get_transaction_by_block_id_and_index_raises_on_incorrect_index(deploy_info):
     """
     Get transaction by block hash and incorrect transaction index
@@ -184,6 +191,7 @@ def test_get_transaction_by_block_id_and_index_raises_on_incorrect_index(deploy_
     }
 
 
+@pytest.mark.usefixtures("run_devnet_in_background")
 def test_get_declare_transaction_receipt(declare_info):
     """
     Get transaction receipt
@@ -205,6 +213,7 @@ def test_get_declare_transaction_receipt(declare_info):
     }
 
 
+@pytest.mark.usefixtures("run_devnet_in_background")
 def test_get_invoke_transaction_receipt(invoke_info):
     """
     Get transaction receipt
@@ -227,7 +236,8 @@ def test_get_invoke_transaction_receipt(invoke_info):
     assert receipt["messages_sent"] == []
 
 
-def test_get_transaction_receipt_on_incorrect_hash(deploy_info):
+@pytest.mark.usefixtures("run_devnet_in_background", "deploy_info")
+def test_get_transaction_receipt_on_incorrect_hash():
     """
     Get transaction receipt by incorrect hash
     """
@@ -243,6 +253,7 @@ def test_get_transaction_receipt_on_incorrect_hash(deploy_info):
     }
 
 
+@pytest.mark.usefixtures("run_devnet_in_background")
 def test_get_deploy_transaction_receipt(deploy_info):
     """
     Get transaction receipt
@@ -264,6 +275,7 @@ def test_get_deploy_transaction_receipt(deploy_info):
     }
 
 
+@pytest.mark.usefixtures("run_devnet_in_background")
 def test_add_invoke_transaction(invoke_content):
     """
     Add invoke transaction
@@ -289,6 +301,7 @@ def test_add_invoke_transaction(invoke_content):
     assert receipt["transaction_hash"][:3] == "0x0"
 
 
+@pytest.mark.usefixtures("run_devnet_in_background")
 def test_add_declare_transaction_on_incorrect_contract(declare_content):
     """
     Add declare transaction on incorrect class
@@ -314,6 +327,7 @@ def test_add_declare_transaction_on_incorrect_contract(declare_content):
     }
 
 
+@pytest.mark.usefixtures("run_devnet_in_background")
 def test_add_declare_transaction(declare_content):
     """
     Add declare transaction
@@ -339,6 +353,7 @@ def test_add_declare_transaction(declare_content):
     assert receipt["class_hash"][:3] == "0x0"
 
 
+@pytest.mark.usefixtures("run_devnet_in_background")
 def test_add_deploy_transaction_on_incorrect_contract(deploy_content):
     """
     Add deploy transaction on incorrect class
@@ -365,6 +380,7 @@ def test_add_deploy_transaction_on_incorrect_contract(deploy_content):
     }
 
 
+@pytest.mark.usefixtures("run_devnet_in_background")
 def test_add_deploy_transaction(deploy_content):
     """
     Add deploy transaction
